@@ -11,15 +11,20 @@ class Datos extends Tabla {
 
 	function medicos_listar($centros)
 	{
-		return $this->matriz("select servicio_id,medico_id as contador from medico_especialidad_filial,especialidad_filial,especialidad where especialidad_filial_id=especialidad_filial.id and especialidad_id=especialidad.id and filial_id in ($centros) group by medico_id order by servicio_id");	
+		if(empty($centros)) $consulta ="";
+		else $consulta = "and filial_id in ($centros)";
+		return $this->matriz("select servicio_id,medico_id as contador from medico_especialidad_filial,especialidad_filial,especialidad where especialidad_filial_id=especialidad_filial.id and especialidad_id=especialidad.id $consulta group by medico_id order by servicio_id");
 	}
 
-	function laboratorios_contar($fecha,$medico,$hora1,$hora2)
+	function laboratorios_contar($laboratorios,$fecha,$medico,$hora1,$hora2)
 	{
+		if(empty($laboratorios)) $consulta = "";
+		else $consulta = "and solservicio_laboratorio.centro_salud_id in ($laboratorios)";
+		
 		if($hora1<$hora2) $hora="time(fechahoralabo)>='$hora1' and time(fechahoralabo)<'$hora2'";
 		else $hora="(time(fechahoralabo)>='$hora1' or time(fechahoralabo)<'$hora2')";
 
-		return $this->lista("select examen_id,count(*) as contador from laboratorio,solservicio_laboratorio,solservicio where laboratorio_id=laboratorio.id and solservicio_id=solservicio.id and date(fechahoralabo)='$fecha' and $hora and solservicio.medico_id=$medico and nroasignadolabo>0 group by examen_id order by examen_id");
+		return $this->lista("select examen_id,count(*) as contador from laboratorio,solservicio_laboratorio,solservicio where laboratorio_id=laboratorio.id and solservicio_id=solservicio.id $consulta and date(fechahoralabo)='$fecha' and $hora and solservicio.medico_id=$medico and nroasignadolabo>0 group by examen_id order by examen_id");
 	}
 
 	function servicio_lista(){
@@ -33,6 +38,12 @@ class Datos extends Tabla {
 	function centro_recuperar($codigo){
 		return $this->valor("select nombre from filial where id=$codigo");
 	}
+
+	function laboratorio_recuperar($codigo){
+                return $this->valor("select nombre from centro_salud where id=$codigo");
+        }
+
+
 }
 
 class Pagina extends Constante{
@@ -40,21 +51,34 @@ class Pagina extends Constante{
 	function laboratorio_listar($fecha)
 	{
 		// lista de centro o establecimientos
-		$centros = array(2,3,5);
 		echo "Fecha: $fecha<br>";
-		$centro_lista="";
-		echo "<table><tr><th>Centros</th></tr>";
-		foreach($centros as $indice => $codigo)
-		{
-			$nombre=$this->datos->centro_recuperar($codigo);
-			$centro_lista.=$codigo.",";
-			echo "<tr><td>$nombre</td></tr>\n";
-			
-		}	
+		echo "<table><tr><th>Centro</th></tr>";
+		$centros="";
+		if(isset($_GET['cen'])){
+			$centros = $_GET['cen'];// str_replace('/',',',$_GET['cen']);
+			$lista = explode(',',$centros);
+			foreach($lista as $indice => $codigo)
+			{
+				$nombre=$this->datos->centro_recuperar($codigo);
+				echo "<tr><td>$codigo</td><td>$nombre</td></tr>\n";
+				
+			}
+		}
 		echo "</table>\n";
-    		$centro_lista=substr($centro_lista,0,-1);
 
+		echo "<table><tr><th>Laboratorio</th></tr>";
+		$laboratorios="";
+		if(isset($_GET['lab'])){
+			$laboratorios= $_GET['lab'];//   str_replace('/',',',$_GET['lab']);	
+			$lista = explode(',',$laboratorios);
+	                foreach($lista as $indice => $codigo)
+        	        {
+                	        $nombre=$this->datos->laboratorio_recuperar($codigo);
+                        	echo "<tr><td>$codigo</td><td>$nombre</td></tr>\n";
 
+	                }
+		}
+                echo "</table>\n";	
 
 		// recuperar tablas
 		$servicio_lista = $this->datos->servicio_lista();
@@ -65,7 +89,7 @@ class Pagina extends Constante{
 		// un medico tenga dos especialidades se ignorara la otra
 		// por transitividad se aplica a servicios
 		// y no todos los centros dan receta
-		$lista = $this->datos->medicos_listar($centro_lista);
+		$lista = $this->datos->medicos_listar($centros);
 		
 
 		// mostrar examenes dentro un servicio 
@@ -80,9 +104,9 @@ class Pagina extends Constante{
 			foreach($medicos as $indice => $medico)
 			{
 				
-				$grupo[0]=$this->datos->laboratorios_contar($fecha,$medico,'06:30:00','12:30:00');
-				$grupo[1]=$this->datos->laboratorios_contar($fecha,$medico,'12:30:00','19:00:00');
-				$grupo[2]=$this->datos->laboratorios_contar($fecha,$medico,'19:00:00','06:30:00');
+				$grupo[0]=$this->datos->laboratorios_contar($laboratorios,$fecha,$medico,'06:30:00','12:30:00');
+				$grupo[1]=$this->datos->laboratorios_contar($laboratorios,$fecha,$medico,'12:30:00','19:00:00');
+				$grupo[2]=$this->datos->laboratorios_contar($laboratorios,$fecha,$medico,'19:00:00','06:30:00');
 
 				for($i=0;$i<3;$i++)
 					foreach($grupo[$i] as $examen => $cantidad)
